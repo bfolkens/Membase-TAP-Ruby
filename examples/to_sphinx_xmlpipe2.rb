@@ -33,10 +33,9 @@ MembaseTAP::Server.open('localhost') do |m_tap|
 
 <sphinx:schema>
 <sphinx:field name="id"/> 
-<sphinx:attr name="context_id" type="int" bits="32"/>
+<sphinx:attr name="category_id" type="int" bits="32"/>
 <sphinx:field name="title"/> 
 <sphinx:field name="content"/> 
-<sphinx:field name="url"/> 
 </sphinx:schema>
 EOT
 	iterator = lambda do |key, value|
@@ -47,10 +46,9 @@ EOT
 
 		puts <<-EOT
 <sphinx:document id="#{id}">
-<context_id>#{entry.context_id}</context_id>
+<category_id>#{entry.context_id}</category_id>
 <title><![CDATA[[#{entity_encoder.encode(iconv.iconv(entry.title), :basic, :named, :hexadecimal)}]]></title>
 <content><![CDATA[[#{entity_encoder.encode(iconv.iconv(entry.content), :basic, :named, :hexadecimal)}]]></content>
-<url><![CDATA[[#{entity_encoder.encode(iconv.iconv(entry.url), :basic, :named, :hexadecimal)}]]></url>
 </sphinx:document>
 EOT
 	end

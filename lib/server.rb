@@ -101,7 +101,7 @@ module MembaseTAP
 			body_size = _key.bytesize + _extras.bytesize + _value.bytesize
 
       req = [REQUEST, OPCODE, _key.bytesize, _extras.bytesize, 0, 0, body_size, 0, 0].pack('CCnCCnNNQ') + _extras + _key + _value
-STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{_extras.bytesize}  datatype: #{0}  vbucket?: #{0}  bodylen: #{body_size}  opaque: #{0}  cas: #{0}" % [REQUEST, OPCODE]
+STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{_extras.bytesize}  datatype: #{0}  vbucket: #{0}  bodylen: #{body_size}  opaque: #{0}  cas: #{0}" % [REQUEST, OPCODE]
 #d req
 
       write req
@@ -111,7 +111,7 @@ STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{
       header = read(TAP_RESPONSE_HEADER_LENGTH)
       raise MembaseTAP::NetworkError, 'No response' if !header
       (magic, opcode, keylen, extlen, datatype, status, bodylen, opaque, cas) = header.unpack(TAP_RESPONSE_HEADER)
-STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  status: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}\r" % [magic, opcode]
+STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  vbucket: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}\r" % [magic, opcode]
 
       case opcode
         when TAP_RESPONSE_CMD_NOOP; return :noop, nil, nil

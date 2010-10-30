@@ -1,8 +1,11 @@
 require 'socket'
 require 'timeout'
+require File.join(File.dirname(__FILE__), 'util')
 
 module MembaseTAP
   class Server
+    include Util
+    
 		attr_accessor :host
 		attr_accessor :port
 		attr_accessor :weight
@@ -25,14 +28,17 @@ module MembaseTAP
     def dump(node_name, &block)
 			tap_request node_name, 0, TAP_DUMP
 			while alive? do
-				yield tap_response
+				res = tap_response
+				yield res if res
 			end
     end
 
-		def backfill(node_name, timestamp, &block)
+		def backfill(node_name, timestamp = nil, &block)
+		  timestamp ||= 0x00000000FFFFFFFF
 			tap_request node_name, timestamp, TAP_BACKFILL
 			while alive? do
-				yield tap_response
+				res = tap_response
+				yield res if res
 			end
 		end
 
@@ -89,12 +95,15 @@ module MembaseTAP
 		end
 		
 		def tap_request(key, value, extras)
-			_extras = [extras].pack('Q')
+			_extras = [extras].pack('N')
 			_key = key
-			_value = [extras].pack('Q')
-			body_size = _key.size + _extras.size + _value.size
+			_value = pack_longlong(value)
+			body_size = _key.bytesize + _extras.bytesize + _value.bytesize
 
-      req = [REQUEST, OPCODE, _key.size, _extras.size, 0, 0, body_size, 0, 0].pack('CCnCCnNNQ') + _extras + _key + _value
+      req = [REQUEST, OPCODE, _key.bytesize, _extras.bytesize, 0, 0, body_size, 0, 0].pack('CCnCCnNNQ') + _extras + _key + _value
+STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{_extras.bytesize}  datatype: #{0}  vbucket?: #{0}  bodylen: #{body_size}  opaque: #{0}  cas: #{0}" % [REQUEST, OPCODE]
+#d req
+
       write req
 		end
 
@@ -102,17 +111,25 @@ module MembaseTAP
       header = read(TAP_RESPONSE_HEADER_LENGTH)
       raise MembaseTAP::NetworkError, 'No response' if !header
       (magic, opcode, keylen, extlen, datatype, status, bodylen, opaque, cas) = header.unpack(TAP_RESPONSE_HEADER)
-#STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  status: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}" % [magic, opcode]
+STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  status: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}\r" % [magic, opcode]
+
+      case opcode
+        when TAP_RESPONSE_CMD_NOOP; return :noop, nil, nil
+        when TAP_RESPONSE_CMD_MUTATION; opcode_sym = :mutation
+    		when TAP_RESPONSE_CMD_DELETE; opcode_sym = :delete
+    		when TAP_RESPONSE_CMD_FLUSH; opcode_sym = :flush
+    		when TAP_RESPONSE_CMD_OPAQUE; opcode_sym = :opaque
+        else
+STDERR.puts
+          raise "Unrecognized TAP opcode: 0x%02x" % opcode
+      end
 
       data = read(bodylen) if bodylen.to_i > 0
 			extra = data[0...extlen]
 			key = data[extlen...(extlen + keylen)]
 			value = data[(extlen + keylen)...bodylen]
 
-#p header
-#STDERR.puts "extra: #{extra}  key: #{key}"
-
-      return key, value
+      return opcode_sym, key, value
     end
     
     
@@ -127,6 +144,12 @@ module MembaseTAP
     
     TAP_RESPONSE_HEADER = 'CCnCCnNNQ'
 		TAP_RESPONSE_HEADER_LENGTH = 1 + 1 + 2 + 1 + 1 + 2 + 4 + 4 + 8
+		
+    TAP_RESPONSE_CMD_MUTATION = 0x41
+    TAP_RESPONSE_CMD_DELETE   = 0x42
+    TAP_RESPONSE_CMD_FLUSH    = 0x43
+    TAP_RESPONSE_CMD_OPAQUE   = 0x44
+    TAP_RESPONSE_CMD_NOOP     = 0x0a
 
     
     # Core connectivity wrappers
@@ -145,7 +168,9 @@ module MembaseTAP
         value = ''
         begin
           loop do
-            value << @sock.sysread(count)
+# puts "\nTry to read #{count - value.size} more bytes, only read #{value.size} / #{count}"
+            value << @sock.sysread(count - value.size)
+# puts "Read #{value.size} / #{count}"
             break if value.size == count
           end
         rescue Errno::EAGAIN, Errno::EWOULDBLOCK
@@ -156,14 +181,17 @@ module MembaseTAP
           end
         end
         value
-      rescue Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED, Errno::EBADF, Errno::EINVAL, Timeout::Error, EOFError
+      rescue EOFError
         down!
+      rescue Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED, Errno::EBADF, Errno::EINVAL, Timeout::Error
+        down!
+STDERR.puts
         raise MembaseTAP::NetworkError, "#{$!.class.name}: #{$!.message}"
       end
     end
     
   end
-  
+
   class TAPError < RuntimeError; end
   class NetworkError < TAPError; end
 end

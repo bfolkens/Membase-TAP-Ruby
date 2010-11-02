@@ -3,7 +3,7 @@
 require 'rubygems'
 require 'htmlentities'
 require 'iconv'
-require File.join(File.dirname(__FILE__), 'lib', 'server')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'server')
 require 'memcached'
 
 RAILS_ROOT = '../railsapp'
@@ -38,7 +38,7 @@ MembaseTAP::Server.open('localhost') do |m_tap|
 <sphinx:field name="content"/> 
 </sphinx:schema>
 EOT
-	iterator = lambda do |key, value|
+	iterator = lambda do |opcode, key, value|
 		next unless key[0...8] == 'entries:'
 		entry = Marshal.load(value)
 		id = key[8..-1]
@@ -56,10 +56,10 @@ EOT
 	begin
     if last_timestamp
       STDERR.puts "Last timestamp not found for this node #{NODE_NAME}, dumping all data"
-		  m_tap.dump "#{NODE_NAME}_sphinx_xmlpipe2", &iterator
+		  m_tap.request "#{NODE_NAME}_sphinx_xmlpipe2", { :dump => true }, &iterator
 		else
 		  STDERR.puts "Backfilling from timestamp: #{last_timestamp}"
-		  m_tap.backfill "#{NODE_NAME}_sphinx_xmlpipe2", last_timestamp, &iterator		  
+		  m_tap.request "#{NODE_NAME}_sphinx_xmlpipe2", { :backfill => true }, &iterator
 	  end
 	rescue Exception, Timeout::Error => e
 		STDERR.puts e

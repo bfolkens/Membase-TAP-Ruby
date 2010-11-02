@@ -25,22 +25,23 @@ module MembaseTAP
       @sock && !@sock.closed?
     end
 
-    def dump(node_name, &block)
-			tap_request node_name, 0, TAP_DUMP
+    def request(node_name, options = {}, &block)
+      opt_mask = 0x0
+      opt_mask |= TAP_DUMP if options[:dump]
+      opt_mask |= TAP_BACKFILL if options[:backfill]
+      opt_mask != TAP_KEYS_ONLY if options[:keys_only]
+      
+      value = 0
+      if options[:backfill]
+        value = options[:backfill_from] || 0x00000000FFFFFFFF
+      end
+      
+			tap_request node_name, value, opt_mask
 			while alive? do
 				res = tap_response
 				yield res if res
 			end
     end
-
-		def backfill(node_name, timestamp = nil, &block)
-		  timestamp ||= 0x00000000FFFFFFFF
-			tap_request node_name, timestamp, TAP_BACKFILL
-			while alive? do
-				res = tap_response
-				yield res if res
-			end
-		end
 
     def down!
       close
@@ -72,7 +73,7 @@ module MembaseTAP
           begin
             sock.connect_nonblock(Socket.pack_sockaddr_in(port, addr[0][3]))
           rescue Errno::EISCONN
-            ;
+            # ignore
           rescue
             raise MembaseTAP::NetworkError, "#{self.host}:#{self.port} is currently down: #{$!.message}"
           end
@@ -102,14 +103,15 @@ module MembaseTAP
 
       req = [REQUEST, OPCODE, _key.bytesize, _extras.bytesize, 0, 0, body_size, 0, 0].pack('CCnCCnNNQ') + _extras + _key + _value
 STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{_extras.bytesize}  datatype: #{0}  vbucket: #{0}  bodylen: #{body_size}  opaque: #{0}  cas: #{0}" % [REQUEST, OPCODE]
-#d req
+d req
 
       write req
 		end
 
     def tap_response
       header = read(TAP_RESPONSE_HEADER_LENGTH)
-      raise MembaseTAP::NetworkError, 'No response' if !header
+      return nil if !header  # We're probably out of data
+      
       (magic, opcode, keylen, extlen, datatype, status, bodylen, opaque, cas) = header.unpack(TAP_RESPONSE_HEADER)
 STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  vbucket: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}\r" % [magic, opcode]
 
@@ -141,6 +143,7 @@ STDERR.puts
 
 		TAP_BACKFILL = 0x01
 		TAP_DUMP = 0x02
+		TAP_KEYS_ONLY = 0x20
     
     TAP_RESPONSE_HEADER = 'CCnCCnNNQ'
 		TAP_RESPONSE_HEADER_LENGTH = 1 + 1 + 2 + 1 + 1 + 2 + 4 + 4 + 8
@@ -183,7 +186,7 @@ STDERR.puts
         value
       rescue EOFError
         down!
-      rescue Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED, Errno::EBADF, Errno::EINVAL, Timeout::Error
+      rescue Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED, Errno::EBADF, Errno::EINVAL, Timeout::Error => e
         down!
 STDERR.puts
         raise MembaseTAP::NetworkError, "#{$!.class.name}: #{$!.message}"

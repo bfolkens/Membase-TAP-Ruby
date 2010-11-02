@@ -20,7 +20,7 @@ module MembaseTAP
 
   	def pack_longlong(val)
 			return nil if val.nil?
-      [val >> 32, val & 0xFFFFFFFF].pack("NN")
+      [val >> 32, val & 0xFFFFFFFF].pack('NN')
   	end
 	
     def unpack_longlong(bytes)

@@ -5,6 +5,8 @@ require File.join(File.dirname(__FILE__), 'util')
 module MembaseTAP
   class Server
     include Util
+
+		DEBUG = true
     
 		attr_accessor :host
 		attr_accessor :port
@@ -102,8 +104,8 @@ module MembaseTAP
 			body_size = _key.bytesize + _extras.bytesize + _value.bytesize
 
       req = [REQUEST, OPCODE, _key.bytesize, _extras.bytesize, 0, 0, body_size, 0, 0].pack('CCnCCnNNQ') + _extras + _key + _value
-STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{_extras.bytesize}  datatype: #{0}  vbucket: #{0}  bodylen: #{body_size}  opaque: #{0}  cas: #{0}" % [REQUEST, OPCODE]
-d req
+			STDERR.puts "magic: 0x%02x  opcode: 0x%02x  keylen: #{_key.bytesize}  extlen: #{_extras.bytesize}  datatype: #{0}  vbucket: #{0}  bodylen: #{body_size}  opaque: #{0}  cas: #{0}" % [REQUEST, OPCODE] if DEBUG
+			d req if DEBUG
 
       write req
 		end
@@ -113,7 +115,7 @@ d req
       return nil if !header  # We're probably out of data
       
       (magic, opcode, keylen, extlen, datatype, status, bodylen, opaque, cas) = header.unpack(TAP_RESPONSE_HEADER)
-STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  vbucket: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}\r" % [magic, opcode]
+			STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen}  datatype: #{datatype}  vbucket: #{status}  bodylen: #{bodylen}  opaque: #{opaque}  cas: #{cas}\r" % [magic, opcode] if DEBUG
 
       case opcode
         when TAP_RESPONSE_CMD_NOOP; return :noop, nil, nil
@@ -122,8 +124,7 @@ STDERR.print "magic: 0x%02x  opcode: 0x%02x  keylen: #{keylen}  extlen: #{extlen
     		when TAP_RESPONSE_CMD_FLUSH; opcode_sym = :flush
     		when TAP_RESPONSE_CMD_OPAQUE; opcode_sym = :opaque
         else
-STDERR.puts
-          raise "Unrecognized TAP opcode: 0x%02x" % opcode
+          STDERR.puts "\nUnrecognized TAP opcode: 0x%02x" % opcode if DEBUG
       end
 
       data = read(bodylen) if bodylen.to_i > 0
@@ -188,7 +189,7 @@ STDERR.puts
         down!
       rescue Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED, Errno::EBADF, Errno::EINVAL, Timeout::Error => e
         down!
-STDERR.puts
+				STDERR.puts if DEBUG
         raise MembaseTAP::NetworkError, "#{$!.class.name}: #{$!.message}"
       end
     end
